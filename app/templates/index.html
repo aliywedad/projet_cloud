@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Items (CRUD Flask + RDS)</h1>
+  <div class="actions">
+    <a class="button" href="{{ url_for('create_item') }}">+ Nouvel item</a>
+  </div>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Nom</th><th>Description</th><th>Créé le</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.id }}</td>
+        <td>{{ item.name }}</td>
+        <td>{{ item.description }}</td>
+        <td>{{ item.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td>
+          <a class="button" href="{{ url_for('edit_item', item_id=item.id) }}">Éditer</a>
+          <form class="inline" method="post" action="{{ url_for('delete_item', item_id=item.id) }}"
+                onsubmit="return confirm('Supprimer cet item ?');">
+            <button class="danger" type="submit">Supprimer</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">Aucun item pour le moment.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

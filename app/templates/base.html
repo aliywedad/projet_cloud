@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>PROJET-1 — Items CRUD</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 40px auto; color: #222; }
+    h1 { border-bottom: 2px solid #333; padding-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+    a.button, button { display: inline-block; padding: 6px 12px; background: #2563eb; color: #fff;
+      text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    a.button.danger, button.danger { background: #dc2626; }
+    form.inline { display: inline; }
+    label { display: block; margin-top: 12px; font-weight: bold; }
+    input[type=text], textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+    .actions { display: flex; gap: 8px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  {% block content %}{% endblock %}
+</body>
+</html>
