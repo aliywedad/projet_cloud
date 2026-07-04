@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  PROJET-1 - Instance RDS PostgreSQL privee (db.t4g.micro). Depend des stacks VPC et Security.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: projet1
+  DBName:
+    Type: String
+    Default: mydb
+  DBUsername:
+    Type: String
+    Default: postgres
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Mot de passe de la base (saisi au moment du deploiement, jamais stocke en clair)
+  DBInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+  DBEngineVersion:
+    Type: String
+    Default: '16.4'
+    Description: Verifie la liste des versions PostgreSQL disponibles dans la console RDS si le deploiement echoue sur cette valeur.
+
+Resources:
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Sous-reseaux prives pour RDS
+      SubnetIds:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-PrivateSubnet1Id
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-PrivateSubnet2Id
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-db-subnet-group
+        - Key: Project
+          Value: PROJET-1
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      Engine: postgres
+      EngineVersion: !Ref DBEngineVersion
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: '20'
+      StorageType: gp3
+      DBName: !Ref DBName
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-RDSSecurityGroupId
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-rds
+        - Key: Project
+          Value: PROJET-1
+
+Outputs:
+  RDSEndpointAddress:
+    Value: !GetAtt DBInstance.Endpoint.Address
+    Export:
+      Name: !Sub ${EnvironmentName}-RDSEndpointAddress
+  RDSEndpointPort:
+    Value: !GetAtt DBInstance.Endpoint.Port
+    Export:
+      Name: !Sub ${EnvironmentName}-RDSEndpointPort
+  DBName:
+    Value: !Ref DBName
+    Export:
+      Name: !Sub ${EnvironmentName}-DBName

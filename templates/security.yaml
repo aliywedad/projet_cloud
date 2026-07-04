@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  PROJET-1 - Security Groups (ALB, EC2, RDS). Depend du stack VPC.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: projet1
+
+Resources:
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Autorise HTTP depuis Internet vers l ALB
+      VpcId: !ImportValue
+        Fn::Sub: ${EnvironmentName}-VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-alb-sg
+        - Key: Project
+          Value: PROJET-1
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Autorise le trafic de l ALB vers les instances EC2 (port 5000)
+      VpcId: !ImportValue
+        Fn::Sub: ${EnvironmentName}-VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ec2-sg
+        - Key: Project
+          Value: PROJET-1
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Autorise les EC2 a se connecter a RDS PostgreSQL (port 5432)
+      VpcId: !ImportValue
+        Fn::Sub: ${EnvironmentName}-VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-rds-sg
+        - Key: Project
+          Value: PROJET-1
+
+Outputs:
+  ALBSecurityGroupId:
+    Value: !Ref ALBSecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-ALBSecurityGroupId
+  EC2SecurityGroupId:
+    Value: !Ref EC2SecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-EC2SecurityGroupId
+  RDSSecurityGroupId:
+    Value: !Ref RDSSecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-RDSSecurityGroupId

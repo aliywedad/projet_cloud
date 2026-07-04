@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  PROJET-1 - Log Group CloudWatch et alarme CPU sur l'Auto Scaling Group.
+  Depend du stack alb-asg (deploie alb-asg avant celui-ci).
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: projet1
+  AlarmEmail:
+    Type: String
+    Description: Email qui recevra les alertes CloudWatch (optionnel, laisser vide pour desactiver)
+    Default: ''
+
+Conditions:
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
+
+Resources:
+
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /${EnvironmentName}/app
+      RetentionInDays: 14
+      Tags:
+        - Key: Project
+          Value: PROJET-1
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlarmEmail
+    Properties:
+      TopicName: !Sub ${EnvironmentName}-alarms
+      Subscription:
+        - Endpoint: !Ref AlarmEmail
+          Protocol: email
+      Tags:
+        - Key: Project
+          Value: PROJET-1
+
+  HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${EnvironmentName}-high-cpu
+      AlarmDescription: CPU moyen de l'ASG superieur a 70% pendant 5 minutes
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !ImportValue
+            Fn::Sub: ${EnvironmentName}-AutoScalingGroupName
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 70
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !If [HasAlarmEmail, !Ref AlarmTopic, !Ref 'AWS::NoValue']
+
+Outputs:
+  AppLogGroupName:
+    Value: !Ref AppLogGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-AppLogGroupName

@@ -1,0 +1,249 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  PROJET-1 - ALB + Auto Scaling Group EC2 (t3.micro) executant l'app Flask CRUD.
+  Depend des stacks VPC, Security et RDS (deploie RDS avant celui-ci).
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: projet1
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  GitRepoUrl:
+    Type: String
+    Default: https://github.com/aliywedad/projet_cloud.git
+    Description: URL HTTPS du repo GitHub contenant le dossier app/ (ex. https://github.com/toi/projet1-infra-web.git)
+  DBUsername:
+    Type: String
+    Default: postgres
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Doit etre le meme mot de passe que celui utilise pour deployer le stack RDS
+  MinSize:
+    Type: String
+    Default: '2'
+  MaxSize:
+    Type: String
+    Default: '4'
+  DesiredCapacity:
+    Type: String
+    Default: '2'
+
+Resources:
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-ec2-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Tags:
+        - Key: Project
+          Value: PROJET-1
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${EnvironmentName}-lt
+      LaunchTemplateData:
+        ImageId: !Ref LatestAmiId
+        InstanceType: t3.micro
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        SecurityGroupIds:
+          - !ImportValue
+            Fn::Sub: ${EnvironmentName}-EC2SecurityGroupId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${EnvironmentName}-app
+              - Key: Project
+                Value: PROJET-1
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub ${EnvironmentName}-app-volume
+              - Key: Project
+                Value: PROJET-1
+        UserData:
+          Fn::Base64:
+            Fn::Sub:
+              - |
+                #!/bin/bash -xe
+                dnf update -y
+                dnf install -y python3 python3-pip git amazon-cloudwatch-agent
+
+                git clone "${GitRepoUrl}" /opt/repo
+                cd /opt/repo/app
+                pip3 install -r requirements.txt
+
+                mkdir -p /var/log/flaskapp
+
+                cat > /etc/systemd/system/flaskapp.service <<SERVICE
+                [Unit]
+                Description=Flask CRUD app (PROJET-1)
+                After=network.target
+
+                [Service]
+                Type=simple
+                WorkingDirectory=/opt/repo/app
+                Environment=DB_ENGINE=postgres
+                Environment=DB_HOST=${DbHost}
+                Environment=DB_PORT=${DbPort}
+                Environment=DB_NAME=${DbName}
+                Environment=DB_USER=${DBUsername}
+                Environment=DB_PASSWORD=${DBPassword}
+                LogsDirectory=flaskapp
+                StandardOutput=append:/var/log/flaskapp/app.log
+                StandardError=append:/var/log/flaskapp/app.log
+                ExecStart=/usr/bin/python3 -m gunicorn -b 0.0.0.0:5000 app:app
+                Restart=always
+                RestartSec=5
+
+                [Install]
+                WantedBy=multi-user.target
+                SERVICE
+
+                systemctl daemon-reload
+                systemctl enable flaskapp
+                systemctl start flaskapp
+
+                cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<CWAGENT
+                {
+                  "logs": {
+                    "logs_collected": {
+                      "files": {
+                        "collect_list": [
+                          {
+                            "file_path": "/var/log/flaskapp/app.log",
+                            "log_group_name": "/${EnvironmentName}/app",
+                            "log_stream_name": "{instance_id}"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+                CWAGENT
+
+                /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+                  -a fetch-config -m ec2 -s \
+                  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+              - DbHost: !ImportValue
+                  Fn::Sub: ${EnvironmentName}-RDSEndpointAddress
+                DbPort: !ImportValue
+                  Fn::Sub: ${EnvironmentName}-RDSEndpointPort
+                DbName: !ImportValue
+                  Fn::Sub: ${EnvironmentName}-DBName
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvironmentName}-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-PublicSubnet1Id
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-PublicSubnet2Id
+      SecurityGroups:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-ALBSecurityGroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-alb
+        - Key: Project
+          Value: PROJET-1
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${EnvironmentName}-tg
+      VpcId: !ImportValue
+        Fn::Sub: ${EnvironmentName}-VpcId
+      Port: 5000
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Project
+          Value: PROJET-1
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub ${EnvironmentName}-asg
+      VPCZoneIdentifier:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-PrivateSubnet1Id
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-PrivateSubnet2Id
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      TargetGroupARNs:
+        - !Ref ALBTargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 120
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-app
+          PropagateAtLaunch: true
+        - Key: Project
+          Value: PROJET-1
+          PropagateAtLaunch: true
+
+  CPUScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60
+
+Outputs:
+  ALBDNSName:
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub ${EnvironmentName}-ALBDNSName
+  AutoScalingGroupName:
+    Value: !Ref AutoScalingGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-AutoScalingGroupName

@@ -2,6 +2,8 @@
 
 Ce document présente cinq idées de projets pour les étudiants inscrits au cours "Architecture Cloud Avancée". Chaque projet est conçu pour renforcer les concepts fondamentaux de l'infrastructure et de la plateforme AWS en utilisant AWS CloudFormation, AWS CDK.
 
+databasePassword
+
 ---
 
 ## 📁 Projet 1 : Infrastructure d'application Web évolutive (PROJET-1)
