@@ -1,48 +1,31 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  PROJET-1 - Log Group CloudWatch et alarme CPU sur l'Auto Scaling Group.
-  Depend du stack alb-asg (deploie alb-asg avant celui-ci).
+Description: PROJET-1 - CloudWatch - logs de l'app et alarmes (CPU et status check)
 
 Parameters:
   EnvironmentName:
     Type: String
     Default: projet1
-  AlarmEmail:
-    Type: String
-    Description: Email qui recevra les alertes CloudWatch (optionnel, laisser vide pour desactiver)
-    Default: ''
-
-Conditions:
-  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
 
 Resources:
 
+  # Log group ou l'agent CloudWatch envoie les logs de l'app Flask
   AppLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /${EnvironmentName}/app
       RetentionInDays: 14
       Tags:
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
-  AlarmTopic:
-    Type: AWS::SNS::Topic
-    Condition: HasAlarmEmail
-    Properties:
-      TopicName: !Sub ${EnvironmentName}-alarms
-      Subscription:
-        - Endpoint: !Ref AlarmEmail
-          Protocol: email
-      Tags:
-        - Key: Project
-          Value: PROJET-1
-
-  HighCPUAlarm:
+  # Alarme d'alerte : CPU tres eleve sur l'ASG (visible dans CloudWatch)
+  HighCpuAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub ${EnvironmentName}-high-cpu
-      AlarmDescription: CPU moyen de l'ASG superieur a 70% pendant 5 minutes
+      AlarmName: !Sub ${EnvironmentName}-monitor-cpu
+      AlarmDescription: CPU moyen de l ASG superieur a 80%
       Namespace: AWS/EC2
       MetricName: CPUUtilization
       Dimensions:
@@ -52,10 +35,36 @@ Resources:
       Statistic: Average
       Period: 300
       EvaluationPeriods: 1
-      Threshold: 70
+      Threshold: 80
       ComparisonOperator: GreaterThanThreshold
-      AlarmActions:
-        - !If [HasAlarmEmail, !Ref AlarmTopic, !Ref 'AWS::NoValue']
+      Tags:
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
+
+  # Alarme : une instance echoue son status check EC2
+  StatusCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${EnvironmentName}-status-check
+      AlarmDescription: Une instance de l ASG echoue son status check
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !ImportValue
+            Fn::Sub: ${EnvironmentName}-AutoScalingGroupName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Tags:
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
 Outputs:
   AppLogGroupName:

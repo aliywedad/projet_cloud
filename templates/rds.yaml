@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  PROJET-1 - Instance RDS PostgreSQL privee (db.t4g.micro). Depend des stacks VPC et Security.
+Description: PROJET-1 - Base RDS PostgreSQL privee (db.t4g.micro)
 
 Parameters:
   EnvironmentName:
@@ -16,17 +15,11 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 8
-    Description: Mot de passe de la base (saisi au moment du deploiement, jamais stocke en clair)
-  DBInstanceClass:
-    Type: String
-    Default: db.t4g.micro
-  DBEngineVersion:
-    Type: String
-    Default: '16.4'
-    Description: Verifie la liste des versions PostgreSQL disponibles dans la console RDS si le deploiement echoue sur cette valeur.
+    Description: Mot de passe de la base (saisi au deploiement, jamais en clair dans le fichier)
 
 Resources:
 
+  # Groupe de sous-reseaux prives ou placer la base
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -39,16 +32,19 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-db-subnet-group
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
+  # Instance RDS PostgreSQL (privee, non accessible depuis internet)
   DBInstance:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
     Properties:
-      Engine: postgres
-      EngineVersion: !Ref DBEngineVersion
-      DBInstanceClass: !Ref DBInstanceClass
+      Engine: postgres  # RDS prend la version PostgreSQL par defaut si on ne la precise pas
+      DBInstanceClass: db.t4g.micro
+
       AllocatedStorage: '20'
       StorageType: gp3
       DBName: !Ref DBName
@@ -64,8 +60,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-rds
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
 Outputs:
   RDSEndpointAddress:

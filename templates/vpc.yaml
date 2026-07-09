@@ -1,109 +1,111 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  PROJET-1 - VPC avec 2 sous-reseaux publics et 2 sous-reseaux prives (2 AZ),
-  Internet Gateway et NAT Gateway.
+Description: PROJET-1 - VPC avec 2 sous-reseaux publics et 2 sous-reseaux prives (2 AZ)
 
 Parameters:
   EnvironmentName:
     Type: String
     Default: projet1
-  VpcCIDR:
-    Type: String
-    Default: 10.0.0.0/16
-  PublicSubnet1CIDR:
-    Type: String
-    Default: 10.0.0.0/24
-  PublicSubnet2CIDR:
-    Type: String
-    Default: 10.0.1.0/24
-  PrivateSubnet1CIDR:
-    Type: String
-    Default: 10.0.10.0/24
-  PrivateSubnet2CIDR:
-    Type: String
-    Default: 10.0.11.0/24
 
 Resources:
 
-  VPC:
+  # VPC principale
+  MyVPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: !Ref VpcCIDR
+      CidrBlock: 10.0.0.0/16
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-vpc
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
+  # Internet Gateway (acces internet du VPC)
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-igw
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
   VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref MyVPC
       InternetGatewayId: !Ref InternetGateway
 
+  # Sous-reseau public AZ1 (pour l'ALB)
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref MyVPC
       AvailabilityZone: !Select [0, !GetAZs '']
-      CidrBlock: !Ref PublicSubnet1CIDR
+      CidrBlock: 10.0.0.0/24
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-public-subnet-1
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
+  # Sous-reseau public AZ2 (pour l'ALB)
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref MyVPC
       AvailabilityZone: !Select [1, !GetAZs '']
-      CidrBlock: !Ref PublicSubnet2CIDR
+      CidrBlock: 10.0.1.0/24
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-public-subnet-2
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
+  # Sous-reseau prive AZ1 (EC2 et RDS)
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref MyVPC
       AvailabilityZone: !Select [0, !GetAZs '']
-      CidrBlock: !Ref PrivateSubnet1CIDR
+      CidrBlock: 10.0.10.0/24
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-private-subnet-1
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
+  # Sous-reseau prive AZ2 (EC2 et RDS)
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref MyVPC
       AvailabilityZone: !Select [1, !GetAZs '']
-      CidrBlock: !Ref PrivateSubnet2CIDR
+      CidrBlock: 10.0.11.0/24
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-private-subnet-2
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
+  # IP fixe pour la NAT Gateway
   NatGatewayEIP:
     Type: AWS::EC2::EIP
     DependsOn: VPCGatewayAttachment
@@ -112,9 +114,12 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-nat-eip
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
+  # NAT Gateway (permet aux sous-reseaux prives de sortir vers internet)
   NatGateway:
     Type: AWS::EC2::NatGateway
     Properties:
@@ -123,18 +128,23 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-nat
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
+  # Table de routage publique (vers l'Internet Gateway)
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref MyVPC
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-public-rt
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -156,15 +166,18 @@ Resources:
       SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref PublicRouteTable
 
+  # Table de routage privee (vers la NAT Gateway)
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref MyVPC
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-private-rt
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
   PrivateRoute:
     Type: AWS::EC2::Route
@@ -187,7 +200,7 @@ Resources:
 
 Outputs:
   VpcId:
-    Value: !Ref VPC
+    Value: !Ref MyVPC
     Export:
       Name: !Sub ${EnvironmentName}-VpcId
   PublicSubnet1Id:

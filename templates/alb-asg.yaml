@@ -1,7 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  PROJET-1 - ALB + Auto Scaling Group EC2 (t3.micro) executant l'app Flask CRUD.
-  Depend des stacks VPC, Security et RDS (deploie RDS avant celui-ci).
+Description: PROJET-1 - ALB + Auto Scaling Group EC2 (t3.micro) qui execute l'app Flask CRUD
 
 Parameters:
   EnvironmentName:
@@ -13,7 +11,7 @@ Parameters:
   GitRepoUrl:
     Type: String
     Default: https://github.com/aliywedad/projet_cloud.git
-    Description: URL HTTPS du repo GitHub contenant le dossier app/ (ex. https://github.com/toi/projet1-infra-web.git)
+    Description: URL du repo GitHub qui contient le dossier app/
   DBUsername:
     Type: String
     Default: postgres
@@ -21,23 +19,15 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 8
-    Description: Doit etre le meme mot de passe que celui utilise pour deployer le stack RDS
-  MinSize:
-    Type: String
-    Default: '2'
-  MaxSize:
-    Type: String
-    Default: '4'
-  DesiredCapacity:
-    Type: String
-    Default: '2'
+    Description: Doit etre le meme mot de passe que celui du stack RDS
 
 Resources:
 
+  # Role IAM pour les EC2 (SSM pour la connexion + agent CloudWatch pour les logs)
   EC2Role:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${EnvironmentName}-ec2-role
+      RoleName: !Sub ${EnvironmentName}-ec2
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -49,8 +39,10 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
       Tags:
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -58,10 +50,21 @@ Resources:
       Roles:
         - !Ref EC2Role
 
-  LaunchTemplate:
+  # Modele des instances EC2 (type t3.micro obligatoire)
+  MyLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateName: !Sub ${EnvironmentName}-lt
+      # tags sur le launch template lui-meme
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - Key: Name
+              Value: !Sub ${EnvironmentName}-lt
+            - Key: supnum:Lab
+              Value: Project-1
+            - Key: supnum:Group
+              Value: GROUP-22053-22086-22014-25240
       LaunchTemplateData:
         ImageId: !Ref LatestAmiId
         InstanceType: t3.micro
@@ -70,19 +73,24 @@ Resources:
         SecurityGroupIds:
           - !ImportValue
             Fn::Sub: ${EnvironmentName}-EC2SecurityGroupId
+        # tags sur les instances et les volumes crees par le launch template
         TagSpecifications:
           - ResourceType: instance
             Tags:
               - Key: Name
                 Value: !Sub ${EnvironmentName}-app
-              - Key: Project
-                Value: PROJET-1
+              - Key: supnum:Lab
+                Value: Project-1
+              - Key: supnum:Group
+                Value: GROUP-22053-22086-22014-25240
           - ResourceType: volume
             Tags:
               - Key: Name
                 Value: !Sub ${EnvironmentName}-app-volume
-              - Key: Project
-                Value: PROJET-1
+              - Key: supnum:Lab
+                Value: Project-1
+              - Key: supnum:Group
+                Value: GROUP-22053-22086-22014-25240
         UserData:
           Fn::Base64:
             Fn::Sub:
@@ -111,7 +119,6 @@ Resources:
                 Environment=DB_NAME=${DbName}
                 Environment=DB_USER=${DBUsername}
                 Environment=DB_PASSWORD=${DBPassword}
-                LogsDirectory=flaskapp
                 StandardOutput=append:/var/log/flaskapp/app.log
                 StandardError=append:/var/log/flaskapp/app.log
                 ExecStart=/usr/bin/python3 -m gunicorn -b 0.0.0.0:5000 app:app
@@ -154,7 +161,8 @@ Resources:
                 DbName: !ImportValue
                   Fn::Sub: ${EnvironmentName}-DBName
 
-  ApplicationLoadBalancer:
+  # Application Load Balancer (dans les sous-reseaux publics)
+  MyALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Name: !Sub ${EnvironmentName}-alb
@@ -171,10 +179,13 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-alb
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
-  ALBTargetGroup:
+  # Target Group avec health check sur /health
+  MyTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: !Sub ${EnvironmentName}-tg
@@ -188,20 +199,25 @@ Resources:
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 3
       Tags:
-        - Key: Project
-          Value: PROJET-1
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-tg
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
   ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
-      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      LoadBalancerArn: !Ref MyALB
       Port: 80
       Protocol: HTTP
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref ALBTargetGroup
+          TargetGroupArn: !Ref MyTargetGroup
 
-  AutoScalingGroup:
+  # Auto Scaling Group (instances dans les sous-reseaux prives, min 2 / max 4)
+  MyAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Sub ${EnvironmentName}-asg
@@ -211,39 +227,100 @@ Resources:
         - !ImportValue
           Fn::Sub: ${EnvironmentName}-PrivateSubnet2Id
       LaunchTemplate:
-        LaunchTemplateId: !Ref LaunchTemplate
-        Version: !GetAtt LaunchTemplate.LatestVersionNumber
-      MinSize: !Ref MinSize
-      MaxSize: !Ref MaxSize
-      DesiredCapacity: !Ref DesiredCapacity
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+      MinSize: 2
+      MaxSize: 4
+      DesiredCapacity: 2
       TargetGroupARNs:
-        - !Ref ALBTargetGroup
+        - !Ref MyTargetGroup
       HealthCheckType: ELB
       HealthCheckGracePeriod: 120
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-app
           PropagateAtLaunch: true
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+          PropagateAtLaunch: true
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
           PropagateAtLaunch: true
 
-  CPUScalingPolicy:
+  # Politique : ajoute 1 instance quand le CPU est trop haut
+  ScaleOutPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties:
-      AutoScalingGroupName: !Ref AutoScalingGroup
-      PolicyType: TargetTrackingScaling
-      TargetTrackingConfiguration:
-        PredefinedMetricSpecification:
-          PredefinedMetricType: ASGAverageCPUUtilization
-        TargetValue: 60
+      AutoScalingGroupName: !Ref MyAutoScalingGroup
+      PolicyType: SimpleScaling
+      AdjustmentType: ChangeInCapacity
+      ScalingAdjustment: 1
+      Cooldown: 300
+
+  # Politique : enleve 1 instance quand le CPU est bas
+  ScaleInPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref MyAutoScalingGroup
+      PolicyType: SimpleScaling
+      AdjustmentType: ChangeInCapacity
+      ScalingAdjustment: -1
+      Cooldown: 300
+
+  # Alarme CPU > 70% -> declenche le scale out
+  CPUHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${EnvironmentName}-cpu-high
+      AlarmDescription: CPU moyen de l ASG superieur a 70%
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref MyAutoScalingGroup
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 70
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref ScaleOutPolicy
+      Tags:
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
+
+  # Alarme CPU < 30% -> declenche le scale in
+  CPULowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${EnvironmentName}-cpu-low
+      AlarmDescription: CPU moyen de l ASG inferieur a 30%
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref MyAutoScalingGroup
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 30
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref ScaleInPolicy
+      Tags:
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
 Outputs:
   ALBDNSName:
-    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Value: !GetAtt MyALB.DNSName
     Export:
       Name: !Sub ${EnvironmentName}-ALBDNSName
   AutoScalingGroupName:
-    Value: !Ref AutoScalingGroup
+    Value: !Ref MyAutoScalingGroup
     Export:
       Name: !Sub ${EnvironmentName}-AutoScalingGroupName

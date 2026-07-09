@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  PROJET-1 - Security Groups (ALB, EC2, RDS). Depend du stack VPC.
+Description: PROJET-1 - Security Groups pour l'ALB, les instances EC2 et la base RDS
 
 Parameters:
   EnvironmentName:
@@ -9,10 +8,11 @@ Parameters:
 
 Resources:
 
+  # SG de l'ALB : autorise le HTTP (port 80) depuis internet
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Autorise HTTP depuis Internet vers l ALB
+      GroupDescription: Autorise HTTP depuis internet vers l ALB
       VpcId: !ImportValue
         Fn::Sub: ${EnvironmentName}-VpcId
       SecurityGroupIngress:
@@ -20,19 +20,19 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-alb-sg
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
-  EC2SecurityGroup:
+  # SG des EC2 : autorise le port 5000 seulement depuis l'ALB
+  WebServerSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Autorise le trafic de l ALB vers les instances EC2 (port 5000)
+      GroupDescription: Autorise le trafic de l ALB vers les EC2 (port 5000)
       VpcId: !ImportValue
         Fn::Sub: ${EnvironmentName}-VpcId
       SecurityGroupIngress:
@@ -40,16 +40,16 @@ Resources:
           FromPort: 5000
           ToPort: 5000
           SourceSecurityGroupId: !Ref ALBSecurityGroup
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ec2-sg
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
-  RDSSecurityGroup:
+  # SG de la base : autorise PostgreSQL (port 5432) seulement depuis les EC2
+  DatabaseSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Autorise les EC2 a se connecter a RDS PostgreSQL (port 5432)
@@ -59,12 +59,14 @@ Resources:
         - IpProtocol: tcp
           FromPort: 5432
           ToPort: 5432
-          SourceSecurityGroupId: !Ref EC2SecurityGroup
+          SourceSecurityGroupId: !Ref WebServerSG
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-rds-sg
-        - Key: Project
-          Value: PROJET-1
+        - Key: supnum:Lab
+          Value: Project-1
+        - Key: supnum:Group
+          Value: GROUP-22053-22086-22014-25240
 
 Outputs:
   ALBSecurityGroupId:
@@ -72,10 +74,10 @@ Outputs:
     Export:
       Name: !Sub ${EnvironmentName}-ALBSecurityGroupId
   EC2SecurityGroupId:
-    Value: !Ref EC2SecurityGroup
+    Value: !Ref WebServerSG
     Export:
       Name: !Sub ${EnvironmentName}-EC2SecurityGroupId
   RDSSecurityGroupId:
-    Value: !Ref RDSSecurityGroup
+    Value: !Ref DatabaseSG
     Export:
       Name: !Sub ${EnvironmentName}-RDSSecurityGroupId
